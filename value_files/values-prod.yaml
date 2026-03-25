@@ -1,0 +1,8 @@
+grafana:
+ adminPassword: prodadmin
+ service:
+   type: ClusterIP
+
+prometheus:
+ prometheusSpec:
+   retention: 30d
