@@ -14,6 +14,7 @@ spec:
       targetRevision: 69.8.2
       helm:
         releaseName: monitoring-prod
+        skipCrds: true
         valueFiles:
           - $values/value_files/values-prod.yaml
     - repoURL: https://github.com/sagiv-Ha/DevExpert_Monitoring.git
