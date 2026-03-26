@@ -6,6 +6,3 @@ grafana:
 prometheus:
  prometheusSpec:
    retention: 7d
-
-prometheus-node-exporter:
-  enabled: false
