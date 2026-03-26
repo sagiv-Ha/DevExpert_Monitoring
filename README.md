@@ -1,62 +1,336 @@
-# Kubernetes Observability Lab
+<p align="center">
+  <img src="https://img.shields.io/badge/Grafana-Dashboards-F46800?style=for-the-badge&logo=grafana&logoColor=white" alt="Grafana" />
+  <img src="https://img.shields.io/badge/Prometheus-Monitoring-E6522C?style=for-the-badge&logo=prometheus&logoColor=white" alt="Prometheus" />
+</p>
 
-> A complete observability stack deployed on **Minikube** with isolated **development** and **production** environments using **Prometheus, Grafana, Alertmanager, Loki, and Promtail**.
+<h1 align="center">Kubernetes Observability Lab</h1>
 
----
-
-## Table of Contents
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Environment Preparation](#environment-preparation)
-- [Configuration Files](#configuration-files)
-- [Deployment Steps](#deployment-steps)
-- [Accessing the Services](#accessing-the-services)
-- [Verification](#verification)
-- [Why use `helm upgrade --install`?](#why-use-helm-upgrade---install)
-- [How Alerts Are Defined](#how-alerts-are-defined)
-- [Differences Between Dev and Prod](#differences-between-dev-and-prod)
-- [Issues Encountered and Resolution](#issues-encountered-and-resolution)
-- [Conclusion](#conclusion)
+<p align="center">
+  Full observability stack on Minikube using Prometheus, Grafana, Alertmanager, Loki and Promtail
+</p>
 
 ---
 
-## Overview
+## Goal
 
-This project demonstrates a full **Kubernetes observability lab** running on **Minikube** with two separate environments:
+Deploy a full observability stack (**metrics, alerts, logs**) on **Minikube** using **Helm** and separate namespaces for **dev/prod parity**.
 
-- `monitoring-dev`
-- `monitoring-prod`
+This repository includes:
 
-The observability platform includes:
-
-- **Prometheus** for metrics collection
-- **Grafana** for dashboards and visualization
-- **Alertmanager** for alert handling
-- **Loki** for centralized log aggregation
-- **Promtail** for shipping pod logs to Loki
-
-The goal of this lab was to build a clean and practical monitoring stack with clear separation between development and production configurations.
+- Helm values files
+- Deployment commands
+- Screenshots of dashboards and logs
+- Short explanations for the required assignment questions
 
 ---
 
-## Architecture
+## Deliverables
 
-The stack is composed of the following components:
+This repository provides:
 
-- **Prometheus** scrapes and stores metrics from Kubernetes services and workloads
-- **Grafana** provides dashboards for metrics and logs visualization
-- **Alertmanager** is deployed as part of the Prometheus stack for alert routing
-- **Loki** stores logs in a cost-efficient log aggregation system
-- **Promtail** runs as the log collector and forwards logs from pods to Loki
+- `values-dev.yaml`
+- `values-prod.yaml`
+- `loki-values-dev.yaml`
+- `loki-values-prod.yaml`
+- Screenshots of:
+  - Grafana dashboards
+  - Prometheus targets
+  - Loki logs
+  - Final running status
+- Explanation of:
+  - Why `helm upgrade --install` is used
+  - How alerts are configured
+  - Differences between dev and prod
 
-### Environment Layout
+---
 
-- **Development Namespace:** `monitoring-dev`
-- **Production Namespace:** `monitoring-prod`
+## Step 1 — Prepare the Environment
 
-Both environments use the same observability architecture, while applying different configuration values for retention, persistence, and operational behavior.
+### Install Minikube
+
+```powershell
+minikube start
+```
+
+### Install Helm
+
+Helm was used as the package manager for deploying the monitoring stack charts.
+
+### Create Namespaces
+
+```powershell
+kubectl create namespace monitoring-dev
+kubectl create namespace monitoring-prod
+```
+
+---
+
+## Step 2 — Add Helm Repositories
+
+```powershell
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+```
+
+---
+
+## Step 3 — Prepare Values Files
+
+### `values-dev.yaml`
+
+```yaml
+grafana:
+  adminPassword: devadmin
+  service:
+    type: ClusterIP
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+```
+
+### `values-prod.yaml`
+
+```yaml
+grafana:
+  adminPassword: prodadmin
+  service:
+    type: ClusterIP
+
+prometheus:
+  prometheusSpec:
+    retention: 30d
+```
+
+### `loki-values-dev.yaml`
+
+```yaml
+loki:
+  persistence:
+    enabled: false
+
+promtail:
+  enabled: true
+```
+
+### `loki-values-prod.yaml`
+
+```yaml
+loki:
+  persistence:
+    enabled: true
+    size: 10Gi
+
+promtail:
+  enabled: true
+```
+
+### Summary
+
+- **Dev** uses shorter Prometheus retention: `7d`
+- **Prod** uses longer Prometheus retention: `30d`
+- **Dev Loki** does not use persistence
+- **Prod Loki** uses persistent storage with `10Gi`
+
+---
+
+## Step 4 — Deploy Prometheus & Grafana
+
+### Dev Environment
+
+```powershell
+helm upgrade --install monitoring-dev prometheus-community/kube-prometheus-stack -n monitoring-dev -f values-dev.yaml
+```
+
+### Prod Environment
+
+```powershell
+helm upgrade --install monitoring-prod prometheus-community/kube-prometheus-stack -n monitoring-prod -f values-prod.yaml
+```
+
+### Why `helm upgrade --install` is used
+
+`helm upgrade --install` is used because it combines both installation and upgrade in one command.
+
+Benefits:
+
+- If the release does not exist, Helm installs it
+- If the release already exists, Helm upgrades it
+- It avoids failures caused by re-running install commands
+- It supports idempotent deployment
+- It is practical for repeated lab testing and troubleshooting
+
+---
+
+## Step 5 — Deploy Loki (Logging)
+
+### Dev Environment
+
+```powershell
+helm upgrade --install loki-dev grafana/loki-stack -n monitoring-dev -f loki-values-dev.yaml
+```
+
+### Prod Environment
+
+```powershell
+helm upgrade --install loki-prod grafana/loki-stack -n monitoring-prod -f loki-values-prod.yaml
+```
+
+### Logging Purpose
+
+This deployment allows:
+
+- Collecting Kubernetes pod logs
+- Sending logs to Loki for centralized storage
+- Viewing logs in Grafana
+
+---
+
+## Step 6 — Port Forward Dashboards
+
+### Grafana (Dev)
+
+```powershell
+kubectl port-forward svc/monitoring-dev-grafana -n monitoring-dev 3000:80
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+Login:
+
+- **Username:** `admin`
+- **Password:** `devadmin`
+
+### Prometheus (Dev)
+
+```powershell
+kubectl port-forward svc/monitoring-dev-kube-prometheus-prometheus -n monitoring-dev 9090:9090
+```
+
+Open:
+
+```text
+http://localhost:9090/targets
+```
+
+### Loki (Dev)
+
+```powershell
+kubectl port-forward svc/loki -n monitoring-dev 3100:3100
+```
+
+### If service names differ
+
+Check the exact generated service names with:
+
+```powershell
+kubectl get svc -n monitoring-dev
+kubectl get svc -n monitoring-prod
+```
+
+---
+
+## Step 7 — Explore Dashboards
+
+After deployment, Grafana and Prometheus were used to verify the environment.
+
+### Verification Performed
+
+1. Accessed Grafana on `http://localhost:3000`
+2. Viewed dashboards for cluster and monitoring data
+3. Confirmed Prometheus targets were in `UP` state
+4. Queried logs from Loki inside Grafana Explore
+
+### Screenshots
+
+#### Grafana Dashboard
+
+![Grafana Dashboard](screenshots/grafana-dashboard-dev.png)
+
+#### Prometheus Targets
+
+![Prometheus Targets](screenshots/prometheus-targets-dev.png)
+
+#### Loki Logs
+
+![Loki Dashboard](screenshots/loki-dashboard-dev.png)
+
+#### Final Deployment Status
+
+![Final Status](screenshots/final-status.png)
+
+---
+
+## Step 8 — Setup Alerts (Optional)
+
+The assignment defines alerts as an optional step.
+
+In the Prometheus stack, alerts are typically configured through:
+
+- **Prometheus alerting rules**
+- **Alertmanager** for routing and handling alerts
+
+### How alerts are configured
+
+The general flow is:
+
+1. Prometheus evaluates alert rules
+2. If a rule condition becomes true, an alert is triggered
+3. The alert is sent to Alertmanager
+4. Alertmanager groups, routes, silences, or forwards the alert
+
+### Status in this repository
+
+At this stage:
+
+- **Alertmanager** is deployed as part of `kube-prometheus-stack`
+- No custom `PrometheusRule` manifest is included in this repository
+- No dedicated custom alert rule was added as part of this submission
+
+This means the stack is **alert-ready**, but custom alert rules were **not configured here**
+
+---
+
+## Step 9 — Dev / Prod Parity
+
+The project uses separate namespaces and different Helm values to demonstrate environment parity with configuration differences.
+
+### Dev
+
+- Namespace: `monitoring-dev`
+- Grafana password: `devadmin`
+- Prometheus retention: `7d`
+- Loki persistence: disabled
+
+### Prod
+
+- Namespace: `monitoring-prod`
+- Grafana password: `prodadmin`
+- Prometheus retention: `30d`
+- Loki persistence: enabled
+- Loki persistent volume size: `10Gi`
+
+### Explanation
+
+Both environments use the same charts and deployment model, but different values files.  
+This demonstrates how the same observability architecture can be adapted for different requirements.
+
+---
+
+## Step 10 — GitOps Bonus (Optional)
+
+GitOps bonus was **not implemented** in this submission.
+
+Possible future extension:
+
+- Store Helm values in GitHub
+- Use ArgoCD to watch the repository
+- Automatically sync changes into dev/prod environments
 
 ---
 
@@ -78,264 +352,14 @@ Both environments use the same observability architecture, while applying differ
 
 ---
 
-## Prerequisites
-
-Before starting, the following tools were installed:
-
-- **Minikube**
-- **kubectl**
-- **Helm**
-
----
-
-## Environment Preparation
-
-### 1. Start Minikube
-
-```powershell
-minikube start
-```
-
-### 2. Enable Ingress Addon
-
-```powershell
-minikube addons enable ingress
-```
-
-### 3. Create Monitoring Namespaces
-
-```powershell
-kubectl create namespace monitoring-dev
-kubectl create namespace monitoring-prod
-```
-
-### 4. Add Helm Repositories
-
-```powershell
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo add grafana https://grafana.github.io/helm-charts
-helm repo update
-```
-
----
-
-## Configuration Files
-
-### `values-dev.yaml`
-
-This file is used for the **development** Prometheus/Grafana deployment.
-
-Key characteristics:
-
-- Grafana admin password configured for dev
-- Prometheus retention set to **7d**
-- `node-exporter` disabled in dev to prevent host-port conflicts on single-node Minikube
-
-### `values-prod.yaml`
-
-This file is used for the **production** Prometheus/Grafana deployment.
-
-Key characteristics:
-
-- Grafana admin password configured for prod
-- Prometheus retention set to **30d**
-- `node-exporter` enabled in prod
-
-### `loki-values-dev.yaml`
-
-This file is used for the **development** Loki deployment.
-
-Key characteristics:
-
-- Loki enabled
-- Promtail enabled
-- Grafana disabled in the Loki chart
-- Persistence disabled
-
-### `loki-values-prod.yaml`
-
-This file is used for the **production** Loki deployment.
-
-Key characteristics:
-
-- Loki enabled
-- Promtail enabled
-- Grafana disabled in the Loki chart
-- Persistence enabled with **10Gi**
-
----
-
-## Deployment Steps
-
-### Deploy Prometheus Stack in Development
-
-```powershell
-helm upgrade --install monitoring-dev prometheus-community/kube-prometheus-stack -n monitoring-dev -f values-dev.yaml
-```
-
-### Deploy Prometheus Stack in Production
-
-```powershell
-helm upgrade --install monitoring-prod prometheus-community/kube-prometheus-stack -n monitoring-prod -f values-prod.yaml
-```
-
-### Deploy Loki Stack in Development
-
-```powershell
-helm upgrade --install loki-dev grafana/loki-stack -n monitoring-dev -f loki-values-dev.yaml
-```
-
-### Deploy Loki Stack in Production
-
-```powershell
-helm upgrade --install loki-prod grafana/loki-stack -n monitoring-prod -f loki-values-prod.yaml
-```
-
----
-
-## Accessing the Services
-
-### Access Grafana in Development
-
-```powershell
-kubectl port-forward svc/monitoring-dev-grafana -n monitoring-dev 3000:80
-```
-
-Open in browser:
-
-```text
-http://localhost:3000
-```
-
-### Access Prometheus in Development
-
-```powershell
-kubectl port-forward svc/monitoring-dev-kube-promet-prometheus -n monitoring-dev 9090:9090
-```
-
-Open in browser:
-
-```text
-http://localhost:9090/targets
-```
-
----
-
-## Verification
-
-After deployment, the stack was verified using dashboards, target health, log queries, and final pod/release status.
-
-### Grafana Dashboard
-
-The Grafana dashboard successfully displayed Prometheus metrics and active visual panels.
-
-![Grafana Dashboard](screenshots/grafana-dashboard-dev.png)
-
-### Prometheus Targets
-
-Prometheus target health page confirmed that monitored endpoints were in `UP` state.
-
-![Prometheus Targets](screenshots/prometheus-targets-dev.png)
-
-### Loki Logs
-
-Loki successfully ingested and displayed logs from the cluster through Grafana Explore.
-
-![Loki Dashboard](screenshots/loki-dashboard-dev.png)
-
-### Final Deployment Status
-
-All required pods and Helm releases were successfully deployed in both namespaces.
-
-![Final Status](screenshots/final-status.png)
-
----
-
-## Why use `helm upgrade --install`?
-
-The command `helm upgrade --install` is useful because it combines **installation** and **upgrade** into a single repeatable deployment command.
-
-### Benefits
-
-- If the release does not exist, Helm installs it
-- If the release already exists, Helm upgrades it
-- It simplifies repeated deployment during testing and troubleshooting
-- It is ideal for lab environments where configuration files are adjusted multiple times
-
-This approach makes the deployment process faster, cleaner, and more maintainable.
-
----
-
-## How Alerts Are Defined
-
-Alerts in the Prometheus stack are typically defined using **Prometheus alerting rules**.
-
-### Basic Alert Flow
-
-1. Prometheus evaluates rule expressions periodically
-2. When a condition becomes true, an alert is triggered
-3. The alert is sent to **Alertmanager**
-4. Alertmanager handles grouping, routing, silencing, and notification delivery
-
-In this lab, **Alertmanager** was deployed as part of `kube-prometheus-stack`, which provides the standard Kubernetes alerting architecture.
-
----
-
-## Differences Between Dev and Prod
-
-Although both environments use the same architecture, several configuration differences were intentionally applied.
-
-### Development Environment
-- Namespace: `monitoring-dev`
-- Prometheus retention: **7d**
-- Loki persistence: **disabled**
-- `node-exporter`: **disabled**
-- Used as a lighter environment for testing and validation
-
-### Production Environment
-- Namespace: `monitoring-prod`
-- Prometheus retention: **30d**
-- Loki persistence: **enabled (10Gi)**
-- `node-exporter`: **enabled**
-- Used as the more complete and persistent deployment model
-
-These differences demonstrate how the same monitoring stack can be adapted to different operational requirements.
-
----
-
-## Issues Encountered and Resolution
-
-During deployment on **single-node Minikube**, a scheduling conflict occurred when `node-exporter` was enabled in both namespaces.
-
-### Problem
-`node-exporter` uses host-level ports, and since Minikube had only one node, the second deployment could not schedule successfully.
-
-### Resolution
-- `node-exporter` remained enabled in **production**
-- `node-exporter` was disabled in **development**
-
-This preserved a more production-like deployment in `monitoring-prod` while avoiding host-port conflicts in the lab environment.
-
----
-
 ## Conclusion
 
-This lab successfully implemented a complete Kubernetes observability environment on **Minikube** using isolated **development** and **production** namespaces.
+This lab successfully deployed a Kubernetes observability stack on Minikube using:
 
-### Implemented Components
-- **Prometheus** for metrics
-- **Grafana** for visualization
-- **Alertmanager** for alert handling
-- **Loki** for logging
-- **Promtail** for log collection
+- Prometheus
+- Grafana
+- Alertmanager
+- Loki
+- Promtail
 
-### Final Result
-The deployment was validated through:
-
-- Working Grafana dashboards
-- Healthy Prometheus targets
-- Successful Loki log queries
-- Fully running pods in both environments
-- Successfully deployed Helm releases in both namespaces
-
-This project provides a strong foundation for Kubernetes monitoring, troubleshooting, and environment-specific observability design.
+The repository includes the required values files, deployment steps, screenshots, and explanations requested in the assignment.
