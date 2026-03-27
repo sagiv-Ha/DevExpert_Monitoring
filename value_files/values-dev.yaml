@@ -6,3 +6,21 @@ grafana:
 prometheus:
  prometheusSpec:
    retention: 7d
+
+alerting:
+ alertmanagers:
+   - namespace: monitoring-dev
+     name: alertmanager
+     port: web
+
+prometheusRule:
+ groups:
+   - name: node-alerts
+     rules:
+       - alert: HighCPU
+         expr: sum(rate(container_cpu_usage_seconds_total[5m])) > 0.8
+         for: 2m
+         labels:
+           severity: warning
+         annotations:
+           summary: "High CPU usage detected"
